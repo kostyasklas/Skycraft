@@ -243,7 +243,19 @@ namespace skycraft
 		}
 		auto& beat = At<proto::Header>(proto::kOffHeader)->mcHeartbeatMs;
 		const auto last = Atomic(beat).load(std::memory_order_acquire);
-		return last != 0 && ::GetTickCount64() - last < kMcTimeoutMs;
+		if (last == 0) {
+			return false;
+		}
+		// Signed: Minecraft's clock (another process, another OS under the Linux bridge) can read a few
+		// ms ahead of ours, which must not wrap into "a huge age".
+		const auto age = static_cast<std::int64_t>(::GetTickCount64() - last);
+		static ULONGLONG lastLog = 0;
+		const auto       now = ::GetTickCount64();
+		if ((age >= static_cast<std::int64_t>(kMcTimeoutMs) || age < -static_cast<std::int64_t>(kMcTimeoutMs)) && now - lastLog > 10000) {
+			lastLog = now;
+			logger::warn("Minecraft heartbeat looks stale: age {} ms (clocks differ or Minecraft is stalled)", age);
+		}
+		return age < static_cast<std::int64_t>(kMcTimeoutMs) && age > -static_cast<std::int64_t>(kMcTimeoutMs);
 	}
 
 	std::uint32_t Link::McPid() const

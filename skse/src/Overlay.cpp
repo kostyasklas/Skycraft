@@ -235,6 +235,11 @@ float4 PSMain(VSOut i) : SV_Target {
 				st.viewportH = static_cast<int>(desc.BufferDesc.Height);
 			}
 			if (!Link::Get().Valid() || !Link::Get().McAlive() || !st.mcInWorld || !InitResources(a_swapChain)) {
+				static ULONGLONG lastLog = 0;
+				if (const auto now = ::GetTickCount64(); now - lastLog > 15000) {
+					lastLog = now;
+					logger::info("overlay idle: valid={} mcAlive={} mcInWorld={}", Link::Get().Valid(), Link::Get().McAlive(), st.mcInWorld.load());
+				}
 				return;
 			}
 			UploadLatestFrame();
