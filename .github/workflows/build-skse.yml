@@ -1,0 +1,67 @@
+name: build-skse
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'skse/**'
+      - 'protocol/**'
+      - '.github/workflows/build-skse.yml'
+  workflow_dispatch:
+
+jobs:
+  skse:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write
+    env:
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show Visual Studio installations
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) { & $vswhere -all -prerelease -format table }
+          cmake --version
+        shell: pwsh
+
+      - name: Clone vcpkg
+        run: |
+          if (-not (Test-Path .tools/vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg .tools/vcpkg
+          }
+        shell: pwsh
+
+      - name: Bootstrap vcpkg
+        run: .\.tools\vcpkg\bootstrap-vcpkg.bat
+        shell: cmd
+
+      - name: Configure (preset default)
+        working-directory: skse
+        run: cmake --preset default
+        shell: pwsh
+
+      - name: Build (preset release)
+        working-directory: skse
+        run: cmake --build --preset release
+        shell: pwsh
+
+      - name: List outputs
+        run: Get-ChildItem -Recurse skse/build -Include SkyCraft.dll,SkyCraft.pdb | Select-Object FullName,Length
+        shell: pwsh
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkyCraft-dll
+          if-no-files-found: error
+          path: |
+            skse/build/**/SkyCraft.dll
+            skse/build/**/SkyCraft.pdb
+            skse/SkyCraft.ini
